@@ -15,7 +15,6 @@ if [ ! -f /etc/redhat-release ]; then
 	exit
 fi
 
-
 yum update -y && yum upgrade -y
 ##################################### Install Java ##################################
 cd ~
@@ -73,10 +72,13 @@ if [[ $REPLY =~ ^[Oo]$ ]]; then
 
 echo 'server {
         listen 80 default_server;
-        listen [::]:80 default_server ipv6only=on;
+        listen [::]:80 default_server;
         server_name _;
-
+        return 301 https://$host$request_uri;
+}
+  server {
         listen 443 ssl;
+        server_name _;
 
         root /usr/share/nginx/html;
         index index.html index.htm;
@@ -116,7 +118,14 @@ echo 'server {
 	sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
 
 echo -e "server {
-	listen 443 ssl;
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        return 301 https://$host$request_uri;
+  }
+
+  server {
+	     listen 443 ssl;
 
         server_name ${domainName} www.${domainName};
 
@@ -178,24 +187,36 @@ sudo yum -y install logstash
 read -p "Logstash encryption or no encryption [E/N]" -n 1 -r
 if [[ $REPLY =~ ^[E]$ ]]; then
 
-echo 'input {
+  read -p "OpenSSL cert or Let's Encrypt Cert [L/O]" -n 1 -r
+  if [[ $REPLY =~ ^[L]$ ]]; then
+touch /etc/logstash/conf.d/02-beats-input.conf
+cat > /etc/logstash/conf.d/02-beats-input.conf << EOF
+input {
   beats {
     port => 5044
     ssl => true
-    ssl_certificate => "/etc/nginx/ssl/nginx.crt"
-    ssl_key => "/etc/nginx/ssl/nginx.key"
+    ssl_certificate => "/etc/letsencrypt/live/$domainName/fullchain.pem"
+    ssl_key => "/etc/letsencrypt/live/$domainName/privkey.pem"
   }
 }
-' | sudo tee /etc/logstash/conf.d/02-beats-input.conf
-
+EOF
+  else
+    echo 'input {
+      beats {
+        port => 5044
+        ssl => true
+        ssl_certificate => "/etc/nginx/ssl/nginx.crt"
+        ssl_key => "/etc/nginx/ssl/nginx.key"
+      }
+    }
+    ' | sudo tee /etc/logstash/conf.d/02-beats-input.conf
+  fi
 else
 
 echo 'input {
   beats {
     port => 5044
-    ssl => true
-    ssl_certificate => "/etc/letsencrypt/live/$domain/fullchain.pem"
-    ssl_key => "/etc/letsencrypt/live/$domain/privkey.pem"
+    ssl => False
   }
 }
 ' | sudo tee /etc/logstash/conf.d/02-beats-input.conf
@@ -233,7 +254,30 @@ echo 'output {
 }
 ' | sudo tee /etc/logstash/conf.d/30-elasticsearch-output.conf
 
+# Load Kibana dashboards
+cd ~
+curl -L -O https://download.elastic.co/beats/dashboards/beats-dashboards-1.1.0.zip
+sudo yum -y install unzip
+unzip beats-dashboards-*.zip
+cd beats-dashboards-*
+./load.sh
 
-sudo service logstash configtest
-sudo systemctl restart logstash
-sudo chkconfig logstash on
+# Load filebeat index into elasticsearch
+cd ~
+curl -O https://gist.githubusercontent.com/thisismitch/3429023e8438cc25b86c/raw/d8c479e2a1adcea8b1fe86570e42abab0f10f364/filebeat-index-template.json
+curl -XPUT 'http://localhost:9200/_template/filebeat?pretty' -d@filebeat-index-template.json
+
+systemctl restart logstash
+systemctl enable logstash
+
+##################################### Install/Setup FirewallD #####################################
+yum install firewalld -y
+
+systemctl start firewalld
+systemctl enable firewalld
+
+firewall-cmd --zone=public --permanent --add-service=http
+firewall-cmd --zone=public --permanent --add-service=https
+firewall-cmd --zone=public --permanent --add-service=ssh
+firewall-cmd --zone=public --permanent --add-port=5044/tcp
+firewall-cmd --reload
