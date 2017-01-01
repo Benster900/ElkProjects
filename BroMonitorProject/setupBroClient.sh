@@ -15,10 +15,21 @@ if [ -f /etc/debian_version ]; then
 	# Install dependencies
 	apt-get install cmake make gcc g++ flex bison libpcap-dev libssl-dev python-dev swig zlib1g-dev git -y
 
+	# NTP Time sync
+	apt install ntp -y
+	service ntp start 
+	
 elif [ -f /etc/redhat-release ]; then
 
 	# Install dependencies
 	yum install cmake make gcc gcc-c++ flex bison libpcap-devel openssl-devel python-devel swig zlib-devel git -y
+
+	# NTP Time Sync
+	yum install ntp ntpdate ntp-doc -y
+	systemctl enable ntpd
+	systemctl start ntpd
+	ntpdate pool.ntp.org
+
 fi
 
 # Install Bro

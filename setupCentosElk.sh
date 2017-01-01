@@ -18,6 +18,13 @@ fi
 # Update system
 yum update -y && yum upgrade -y
 
+
+################################## NTP Time Sync ##################################
+yum install ntp ntpdate ntp-doc -y
+systemctl enable ntpd
+systemctl start ntpd
+ntpdate pool.ntp.org
+
 ##################################### Install Java ##################################
 cd /opt
 wget --no-cookies --no-check-certificate --header "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/8u102-b14/jre-8u102-linux-x64.rpm"
