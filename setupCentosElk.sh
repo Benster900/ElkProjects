@@ -20,10 +20,10 @@ yum update -y && yum upgrade -y
 
 
 ################################## NTP Time Sync ##################################
-yum install ntp ntpdate ntp-doc -y
-systemctl enable ntpd
-systemctl start ntpd
-ntpdate pool.ntp.org
+yum install ntp ntpdate ntp-doc -y || true
+systemctl enable ntpd || true
+systemctl start ntpd || true
+ntpdate pool.ntp.org || true
 
 ##################################### Install Java ##################################
 cd /opt
